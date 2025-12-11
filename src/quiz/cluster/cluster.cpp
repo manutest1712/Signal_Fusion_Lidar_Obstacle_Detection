@@ -7,6 +7,8 @@
 #include <string>
 #include "kdtree.h"
 
+typedef unsigned int uint;
+
 // Arguments:
 // window is the region to draw box around
 // increase zoom to see more of the area
@@ -75,12 +77,52 @@ void render2DTree(Node* node, pcl::visualization::PCLVisualizer::Ptr& viewer, Bo
 
 }
 
+void proximity(int idx,
+    const std::vector<std::vector<float>>& points,
+    std::vector<bool>& processed,
+    std::vector<int>& cluster,
+    KdTree* tree,
+    float distanceTol)
+{
+    // Mark this point as processed
+    processed[idx] = true;
+
+    // Add the point’s index to the cluster
+    cluster.push_back(idx);
+
+    // Search for nearby points
+    std::vector<int> nearby = tree->search(points[idx], distanceTol);
+
+
+    // Explore all neighbors
+    for (int id : nearby)
+    {
+        if (!processed[id])
+        {
+            // Recursive expansion
+            proximity(id, points, processed, cluster, tree, distanceTol);
+        }
+    }
+}
+
 std::vector<std::vector<int>> euclideanCluster(const std::vector<std::vector<float>>& points, KdTree* tree, float distanceTol)
 {
 
-	// TODO: Fill out this function to return list of indices for each cluster
-
 	std::vector<std::vector<int>> clusters;
+
+    // Track processed points
+    std::vector<bool> processed(points.size(), false);
+
+    // Iterate through every point
+    for (int i = 0; i < points.size(); i++)
+    {
+        if (!processed[i])
+        {
+            std::vector<int> cluster;
+            proximity(i, points, processed, cluster, tree, distanceTol);
+            clusters.push_back(cluster);
+        }
+    }
  
 	return clusters;
 
@@ -106,14 +148,19 @@ int main ()
 
 	KdTree* tree = new KdTree;
   
-    for (int i=0; i<points.size(); i++) 
-    	tree->insert(points[i],i); 
+    //for (int i=0; i<points.size(); i++) 
+    //	tree->insert(points[i],i); 
 
   	int it = 0;
-  	render2DTree(tree->root,viewer,window, it);
+  	//render2DTree(tree->root,viewer,window, it);
+
+    KdTree* treeNew = new KdTree ;
+    treeNew->buildTree(points);
+
+    render2DTree(treeNew->root, viewer, window, it);
   
   	std::cout << "Test Search" << std::endl;
-  	std::vector<int> nearby = tree->search({-6,7},3.0);
+  	std::vector<int> nearby = treeNew->search({-6,7},3.0);
   	for(int index : nearby)
       std::cout << index << ",";
   	std::cout << std::endl;
@@ -121,7 +168,7 @@ int main ()
   	// Time segmentation process
   	auto startTime = std::chrono::steady_clock::now();
   	//
-  	std::vector<std::vector<int>> clusters = euclideanCluster(points, tree, 3.0);
+  	std::vector<std::vector<int>> clusters = euclideanCluster(points, treeNew, 3.0);
   	//
   	auto endTime = std::chrono::steady_clock::now();
   	auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
