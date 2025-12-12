@@ -43,7 +43,50 @@ void cityBlock(pcl::visualization::PCLVisualizer::Ptr& viewer)
 
     ProcessPointClouds<pcl::PointXYZI>* pointProcessorI = new ProcessPointClouds<pcl::PointXYZI>();
     pcl::PointCloud<pcl::PointXYZI>::Ptr inputCloud = pointProcessorI->loadPcd("../src/sensors/data/pcd/data_1/0000000000.pcd");
-    renderPointCloud(viewer, inputCloud, "inputCloud");
+
+    std::cout << "Input cloud size: " << inputCloud->size() << std::endl;
+
+    //keep points in a 22×20×5 meter region
+    Eigen::Vector4f minPoint(-7.0, -10.0, -2.0, 1.0);
+    Eigen::Vector4f maxPoint(15.0, 10.0, 3.0, 1.0);
+
+    //Remove Car Roof
+    Eigen::Vector4f roofMinPoint(-1.5, -1.7, -1.0, 1.0);
+    Eigen::Vector4f roofMaxPoint(2.6, 1.7, -0.4, 1.0);
+    
+    pcl::PointCloud<pcl::PointXYZI>::Ptr filterCloud = pointProcessorI->FilterCloud(inputCloud, 0.2 ,minPoint, maxPoint, roofMinPoint, roofMaxPoint);
+    renderPointCloud(viewer, filterCloud, "filterCloud");
+
+    //std::pair<pcl::PointCloud<pcl::PointXYZI>::Ptr, pcl::PointCloud<pcl::PointXYZI>::Ptr> segmentCloud
+    auto segmentCloud = pointProcessorI->SegmentPlane(filterCloud, 100, 0.2);
+    //renderPointCloud(viewer, segmentCloud.first, "obstCloud", Color(1, 0, 0));
+    //renderPointCloud(viewer, segmentCloud.second, "planeCloud", Color(0, 1, 0));
+
+     // Clustering
+    std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> cloudClusters = pointProcessorI->Clustering(segmentCloud.first, 0.45, 10, 1200);
+
+    std::vector<Color> colors = { Color(1,1,0), Color(0,1,1), Color(1,0,1) };
+
+    int numColors = colors.size();
+    int clusterId = 0;
+
+    for (pcl::PointCloud<pcl::PointXYZI>::Ptr cluster : cloudClusters)
+    {
+        std::cout << "cluster size ";
+        pointProcessorI->numPoints(cluster);
+
+        // Pick color by cycling through available colors
+        Color color = colors[clusterId % numColors];
+        renderPointCloud(viewer, cluster, "obstCloud" + std::to_string(clusterId), color);
+
+        Box box = pointProcessorI->BoundingBox(cluster);
+        renderBox(viewer, box, clusterId, color);
+
+        ++clusterId;
+    }
+
+
+    
 }
 
 void simpleHighway(pcl::visualization::PCLVisualizer::Ptr& viewer)

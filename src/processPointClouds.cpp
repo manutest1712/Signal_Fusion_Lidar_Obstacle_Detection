@@ -21,11 +21,73 @@ void ProcessPointClouds<PointT>::numPoints(typename pcl::PointCloud<PointT>::Ptr
 
 
 template<typename PointT>
-typename pcl::PointCloud<PointT>::Ptr ProcessPointClouds<PointT>::FilterCloud(typename pcl::PointCloud<PointT>::Ptr cloud, float filterRes, Eigen::Vector4f minPoint, Eigen::Vector4f maxPoint)
+typename pcl::PointCloud<PointT>::Ptr ProcessPointClouds<PointT>::FilterCloud(typename pcl::PointCloud<PointT>::Ptr cloud, float filterRes, 
+    Eigen::Vector4f minPoint, Eigen::Vector4f maxPoint,
+    Eigen::Vector4f roofMinPoint, Eigen::Vector4f roofMaxPoint)
 {
 
     // Time segmentation process
     auto startTime = std::chrono::steady_clock::now();
+
+    // ---------------------------------------------------------
+    // 1. Apply Voxel Grid Downsampling
+    // ---------------------------------------------------------
+
+    pcl::VoxelGrid<PointT> vg;
+    typename pcl::PointCloud<PointT>::Ptr voxelFiltered(new pcl::PointCloud<PointT>);
+
+    vg.setInputCloud(cloud);
+    vg.setLeafSize(filterRes, filterRes, filterRes);  // cube resolution
+    vg.filter(*voxelFiltered);
+
+    std::cout << "Voxel grid applied cloud size: " << voxelFiltered->size() << std::endl;
+
+    // ---------------------------------------------------------
+    // 2. Region of Interest Filtering (CropBox)
+    // ---------------------------------------------------------
+    pcl::CropBox<PointT> region(true);  // 'true' = keep organized structure if used
+    region.setMin(minPoint);            // minPoint = Eigen::Vector4f(x_min, y_min, z_min, 1.0)
+    region.setMax(maxPoint);            // maxPoint = Eigen::Vector4f(x_max, y_max, z_max, 1.0)
+
+    typename pcl::PointCloud<PointT>::Ptr cloudRegion(new pcl::PointCloud<PointT>);
+    region.setInputCloud(voxelFiltered);
+    region.filter(*cloudRegion);
+
+    std::cout << "After ROI filter cloud size: " << cloudRegion->size() << std::endl;
+
+    // ---------------------------------------------------------
+    // 3. Remove points inside a "roof" region
+    // ---------------------------------------------------------
+
+    // a. Find indices inside the CropBox
+    std::vector<int> indices;
+
+    pcl::CropBox<PointT> roof(true);
+    roof.setMin(roofMinPoint);
+    roof.setMax(roofMaxPoint);
+    roof.setInputCloud(cloudRegion);
+    roof.filter(indices);    // indices of points to REMOVE
+
+    // b. Put indices into PointIndices format
+    pcl::PointIndices::Ptr inliers(new pcl::PointIndices());
+    for (int point_index : indices)
+    {
+        inliers->indices.push_back(point_index);
+    }
+
+    // c. Extract and REMOVE those indices
+    pcl::ExtractIndices<PointT> extract;
+    extract.setInputCloud(cloudRegion);
+    extract.setIndices(inliers);
+    extract.setNegative(true);        // <-- true = REMOVE these points
+    extract.filter(*cloudRegion);     // result written back to same cloud
+
+    
+    std::cout << "After Removing Roof top filter cloud size: " << cloudRegion->size() << std::endl;
+
+    return cloudRegion;
+
+
 
     // TODO:: Fill in the function to do voxel grid point reduction and region based filtering
 
@@ -300,6 +362,7 @@ std::pair<typename pcl::PointCloud<PointT>::Ptr,
 
     return std::make_pair(obstacleCloud, planeCloud);
 }
+
 
 template<typename PointT>
 std::unordered_set<int> ProcessPointClouds<PointT>::RansacPlane(typename pcl::PointCloud<PointT>::Ptr cloud,
