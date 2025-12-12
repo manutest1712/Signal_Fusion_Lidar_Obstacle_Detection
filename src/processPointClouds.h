@@ -20,6 +20,7 @@
 #include <ctime>
 #include <chrono>
 #include "render/box.h"
+#include "clustering/kdtree.h"
 
 template<typename PointT>
 class ProcessPointClouds {
@@ -41,6 +42,7 @@ public:
     std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT>::Ptr> Segment(typename pcl::PointCloud<PointT>::Ptr cloud, int maxIterations, float distanceThreshold);
 
     std::vector<typename pcl::PointCloud<PointT>::Ptr> Clustering(typename pcl::PointCloud<PointT>::Ptr cloud, float clusterTolerance, int minSize, int maxSize);
+    std::vector<typename pcl::PointCloud<PointT>::Ptr> ClusteringCustom(typename pcl::PointCloud<PointT>::Ptr cloud, float clusterTolerance, int minSize, int maxSize);
 
     Box BoundingBox(typename pcl::PointCloud<PointT>::Ptr cluster);
 
@@ -54,6 +56,17 @@ private:
     std::unordered_set<int> RansacPlane(typename pcl::PointCloud<PointT>::Ptr cloud,
         int maxIterations,
         float distanceTol);
+
+    void proximity(int,
+        const std::vector<std::vector<float>>&,
+        std::vector<bool>&,
+        std::vector<int>&,
+        KdTreeCustom*,
+        float);
+    std::vector<std::vector<int>> euclideanCluster(
+        const std::vector<std::vector<float>>&,
+        KdTreeCustom*,
+        float);
 
 };
 #endif /* PROCESSPOINTCLOUDS_H_ */
